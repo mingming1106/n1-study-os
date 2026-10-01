@@ -3,8 +3,7 @@ const nav=document.querySelector('#nav'), app=document.querySelector('#app');
 let state=JSON.parse(localStorage.getItem('n1os')||'{"done":{},"words":0,"grammar":0,"wrong":[],"days":[]}');
 const save=()=>localStorage.setItem('n1os',JSON.stringify(state));
 function countdown(){const target=new Date('2027-12-05T09:00:00');const d=Math.max(0,Math.ceil((target-new Date())/86400000));document.querySelector('#countdown').textContent=`あと ${d} 日（暂定）`};countdown();
-pages.forEach((p,i)=>{let b=document.createElement('button');b.textContent=p;b.onclick=()=>render(p,b);nav.appendChild(b);if(!i)render(p,b)});
-function render(p,b){[...nav.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelector('#pageTitle').textContent=p==='首页'?'今日の学習':p; app.innerHTML=views[p]();bind(p)}
+function render(p,b){[...nav.children].forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');document.querySelector('#pageTitle').textContent=p==='首页'?'今日の学習':p; app.innerHTML=views[p]();bind(p)}
 const taskData=[['単語','新词 20 + 复习 30','20 min'],['文法','N1 核心语法 3 条','15 min'],['読解','中篇阅读 1 篇','15 min'],['聴解','ポイント理解练习','20 min'],['復習','昨日错题','10 min']];
 const views={
 '首页':()=>{let n=Object.values(state.done).filter(Boolean).length;return `<div class=grid><div class='card span8'><h2>今日の学習 <span class=tag>${n}/5</span></h2>${taskData.map((t,i)=>`<label class=task><input type=checkbox data-task=${i} ${state.done[i]?'checked':''}><span class=grow><b>${t[0]}</b><br><span class=muted>${t[1]}</span></span><span class=pill>${t[2]}</span></label>`).join('')}</div><div class='card span4'><h2>今日の進捗</h2><div class=big>${n*20}%</div><div class=bar><i style='width:${n*20}%'></i></div><p class=muted>每日完成一点，比临考突击更重要。</p></div><div class='card span8'><h2>Road to N1</h2><p><b>Phase 1 · 基础构建</b>　2026.10 — 2027.02</p><div class=bar><i style='width:3%'></i></div><p class=muted>当前重点：建立 N1 词汇/语法基础，并养成持续听力输入。</p></div><div class='card span4'><h2>弱点</h2><p class=notice>数据积累中。完成练习后，这里会自动显示正确率最低的题型。</p></div></div>`},
@@ -26,3 +25,7 @@ function bind(p){document.querySelectorAll('[data-task]').forEach(x=>x.onchange=
 const mobileItems=[['首页','⌂','首页'],['学习','学','单词'],['练习','練','专项练习'],['进度','進','统计'],['我的','☰','学习计划']];
 const mobileNav=document.querySelector('#mobileNav');
 if(mobileNav){mobileItems.forEach(([label,icon,page])=>{const bt=document.createElement('button');bt.innerHTML=`<b>${icon}</b>${label}`;bt.onclick=()=>{const idx=pages.indexOf(page);render(page,nav.children[idx]);[...mobileNav.children].forEach(x=>x.classList.remove('active'));bt.classList.add('active')};mobileNav.appendChild(bt)});mobileNav.children[0]?.classList.add('active')}
+
+// Initialize only after all view functions exist. This avoids Safari/GitHub Pages loading a blank shell.
+pages.forEach((p)=>{const b=document.createElement('button');b.textContent=p;b.onclick=()=>render(p,b);nav.appendChild(b)});
+render('首页',nav.children[0]);
