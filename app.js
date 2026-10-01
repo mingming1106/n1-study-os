@@ -4,7 +4,8 @@ let state=JSON.parse(localStorage.getItem('n1os')||'{"done":{},"words":0,"gramma
 if(!state.wordSrs) state.wordSrs={};
 if(!state.audio) state.audio={rate:1, autoWord:false, autoExample:false};
 if(!state.history) state.history=[];
-if(!state.version) state.version='3.2';
+if(!state.version) state.version='3.3';
+if(!state.studySession) state.studySession={wordKey:null, deckIndex:0, date:null, newSeenToday:0, reviewsToday:0};
 const save=()=>localStorage.setItem('n1os',JSON.stringify(state));
 function countdown(){const target=new Date('2027-12-05T09:00:00');const d=Math.max(0,Math.ceil((target-new Date())/86400000));document.querySelector('#countdown').textContent=`あと ${d} 日（暂定）`};countdown();
 function render(p,b){[...nav.children].forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');document.querySelector('#pageTitle').textContent=p==='首页'?'今日の学習':p; app.innerHTML=views[p]();bind(p)}
@@ -30,19 +31,49 @@ const FALLBACK_WORDS=[
 {id:'local-5',word:'著しい',reading:'いちじるしい',meanings:['显著的；明显的；惊人的'],pos:['い形容詞'],examples:[{ja:'この地域では人口の減少が著しい。',furigana:'この{地域|ちいき}では{人口|じんこう}の{減少|げんしょう}が{著|いちじる}しい。',en:'这个地区的人口减少十分显著。'}],zh:true}
 ];
 const VOCAB_URL='https://raw.githubusercontent.com/evanclan/OpenJLPT/main/data/json/vocab/n1.json';
-let wordDeck=FALLBACK_WORDS.slice(), wordIndex=0, wordRevealed=false, vocabLoading=false, vocabLoaded=false, vocabError='';
+let wordDeck=FALLBACK_WORDS.slice(), wordIndex=Number(state.studySession?.deckIndex||0), wordRevealed=false, vocabLoading=false, vocabLoaded=false, vocabError='';
 async function loadVocabulary(){
  if(vocabLoading||vocabLoaded)return; vocabLoading=true;
  try{
   let data=null;
   if('caches' in window){const c=await caches.open('n1-vocab-v3');let r=await c.match(VOCAB_URL);if(r)data=await r.json();else{r=await fetch(VOCAB_URL,{cache:'no-cache'});if(!r.ok)throw new Error('HTTP '+r.status);await c.put(VOCAB_URL,r.clone());data=await r.json();}}
   else {const r=await fetch(VOCAB_URL);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();}
-  if(Array.isArray(data)&&data.length>3000){wordDeck=data;vocabLoaded=true;vocabError='';}
+  if(Array.isArray(data)&&data.length>3000){wordDeck=data;vocabLoaded=true;vocabError='';restoreWordPosition();}
   else throw new Error('词库数据不完整');
  }catch(e){vocabError='完整词库暂时无法载入；当前使用内置示范词。联网后刷新即可重试。';console.error(e)}
  vocabLoading=false;
  if(document.querySelector('#pageTitle')?.textContent==='单词') render('单词',nav.children[pages.indexOf('单词')]);
 }
+
+function wordKey(w){return String(w?.id||w?.word||'')}
+function restoreWordPosition(){
+ const ss=state.studySession||{};
+ let i=-1;
+ if(ss.wordKey) i=wordDeck.findIndex(w=>wordKey(w)===String(ss.wordKey));
+ if(i<0 && Number.isFinite(ss.deckIndex)) i=Math.min(Math.max(0,Number(ss.deckIndex)),Math.max(0,wordDeck.length-1));
+ wordIndex=i>=0?i:0;
+}
+function persistWordPosition(){
+ const w=wordDeck[wordIndex%wordDeck.length];
+ state.studySession=state.studySession||{};
+ state.studySession.wordKey=wordKey(w);
+ state.studySession.deckIndex=wordIndex%wordDeck.length;
+ state.studySession.date=new Date().toISOString().slice(0,10);
+ save();
+}
+function nextUnseenIndex(start){
+ if(!wordDeck.length)return 0;
+ for(let step=1;step<=wordDeck.length;step++){
+  const i=(start+step)%wordDeck.length, w=wordDeck[i];
+  if(!state.wordSrs[wordKey(w)]) return i;
+ }
+ return (start+1)%wordDeck.length;
+}
+function sessionStats(){
+ const ss=state.studySession||{};
+ return {newSeenToday:ss.newSeenToday||0,reviewsToday:ss.reviewsToday||0};
+}
+
 function furiganaHTML(s=''){return s.replace(/\{([^|{}]+)\|([^{}]+)\}/g,'<ruby>$1<rt>$2</rt></ruby>')}
 function dueWords(){const now=Date.now();return wordDeck.filter(w=>state.wordSrs[w.id||w.word]?.due<=now).length}
 function knownWords(){return Object.values(state.wordSrs).filter(v=>['Familiar','Mastered'].includes(v.level)).length}
@@ -57,7 +88,7 @@ function wordFlashcards(){
  ${ex?`<div class=example><div class=example-head><b>${ex.ja}</b><button class='audio-btn small' id=speakExample aria-label='播放例句'>🔊</button></div>${ex.furigana?`<div class=example-reading>${furiganaHTML(ex.furigana)}</div>`:''}<div>${ex.en||''}</div></div>`:`<div class=notice>该词条的数据源暂无例句；不伪造例句。</div>`}
  <div class=meta-row><b>词性</b><span>${(x.pos||[]).join(' · ')||'—'}</span></div><div class=meta-row><b>JLPT</b><span>${x.level||'N1'}</span></div>
  <div class=srs-actions><button data-rate=again>不会<br><small>10 分钟</small></button><button data-rate=hard>模糊<br><small>1 天</small></button><button data-rate=good>认识<br><small>3 天</small></button></div></div>`:`<div class=reveal><p class=muted>先在脑中回忆词义，再显示答案。</p><button class=btn id=revealWord>显示答案</button></div>`}
- </div><div class='card span4'><h2>N1 Vocabulary</h2><div class=metrics style='grid-template-columns:1fr 1fr'><div class=metric><span>词库</span><b>${wordDeck.length}</b></div><div class=metric><span>已掌握</span><b>${knownWords()}</b></div><div class=metric><span>待复习</span><b>${dueWords()}</b></div><div class=metric><span>状态</span><b style='font-size:15px'>${vocabLoaded?'完整库':'载入中'}</b></div></div>${vocabError?`<p class=notice>${vocabError}</p>`:''}<p class=muted>完整 N1 库来自 OpenJLPT，共 3,463 个 N1 词条；JLPT 官方不发布固定词表，因此这是社区标准备考数据，而非“官方 N1 词表”。</p><p class=muted>界面已恢复中文优先。开放词库中尚无可靠中文释义的词条会明确标记，并把英文原释义折叠为辅助信息，不再把英文冒充主释义。</p><div class=vocab-tools><button class='btn secondary' id=exportProgress>导出进度备份</button><label class='btn secondary file-btn'>导入进度<input id=importProgress type=file accept='application/json' hidden></label></div><p class=muted>进度保存在当前浏览器，并可用 JSON 备份迁移到新设备。</p><div class=vocab-tools><button class='btn secondary' id=randomWord>随机一词</button><button class='btn secondary' id=dueWord>复习到期</button></div><div class=audio-settings><h3>🔊 发音设置</h3><label>语速 <select id=audioRate><option value='0.75' ${state.audio.rate==0.75?'selected':''}>慢速 0.75×</option><option value='1' ${state.audio.rate==1?'selected':''}>正常 1.0×</option></select></label><label><input type=checkbox id=autoWord ${state.audio.autoWord?'checked':''}> 显示答案时自动朗读单词</label><label><input type=checkbox id=autoExample ${state.audio.autoExample?'checked':''}> 显示答案时自动朗读例句</label><p class=muted id=voiceStatus>使用设备的 ja-JP 日语语音。</p></div></div></div>`}
+ </div><div class='card span4'><h2>N1 Vocabulary</h2><div class=metrics style='grid-template-columns:1fr 1fr'><div class=metric><span>词库</span><b>${wordDeck.length}</b></div><div class=metric><span>已掌握</span><b>${knownWords()}</b></div><div class=metric><span>待复习</span><b>${dueWords()}</b></div><div class=metric><span>状态</span><b style='font-size:15px'>${vocabLoaded?'完整库':'载入中'}</b></div></div>${vocabError?`<p class=notice>${vocabError}</p>`:''}<p class=muted>词表分级来自 OpenJLPT（N1 3,463 词）。中文词典层采用可再分发的 JMdict/Tomoshi 开放数据方案；当前无法匹配到中文的条目会明确标记，不会把英文冒充中文。</p><div class=notice><b>断点续学已开启</b><br>退出或刷新后会恢复到当前词；已经学习过的词不会再次作为 New 从头开始。</div><div class=vocab-tools><button class='btn secondary' id=exportProgress>导出进度备份</button><label class='btn secondary file-btn'>导入进度<input id=importProgress type=file accept='application/json' hidden></label></div><p class=muted>进度保存在当前浏览器，并可用 JSON 备份迁移到新设备。</p><div class=vocab-tools><button class='btn secondary' id=randomWord>随机一词</button><button class='btn secondary' id=dueWord>复习到期</button></div><div class=audio-settings><h3>🔊 发音设置</h3><label>语速 <select id=audioRate><option value='0.75' ${state.audio.rate==0.75?'selected':''}>慢速 0.75×</option><option value='1' ${state.audio.rate==1?'selected':''}>正常 1.0×</option></select></label><label><input type=checkbox id=autoWord ${state.audio.autoWord?'checked':''}> 显示答案时自动朗读单词</label><label><input type=checkbox id=autoExample ${state.audio.autoExample?'checked':''}> 显示答案时自动朗读例句</label><p class=muted id=voiceStatus>使用设备的 ja-JP 日语语音。</p></div></div></div>`}
 
 function exampleSpeechText(ex){
  if(!ex)return '';
@@ -87,9 +118,23 @@ function speakJapanese(text){
  window.speechSynthesis.cancel();window.speechSynthesis.speak(u);return true;
 }
 
-function rateWord(rate){const x=wordDeck[wordIndex%wordDeck.length],key=x.id||x.word,now=Date.now(),old=state.wordSrs[key]||{};let days=0,level='Learning';if(rate==='again'){days=10/1440}else if(rate==='hard'){days=Math.max(1,(old.interval||0)*1.5);level='Learning'}else{days=old.interval?Math.min(90,Math.max(3,old.interval*2.3)):3;level=days>=21?'Mastered':'Familiar'}state.wordSrs[key]={level,last:now,due:now+days*86400000,reviews:(old.reviews||0)+1,interval:days,word:x.word,reading:x.reading||''};state.history.push({ts:now,key,word:x.word,reading:x.reading||'',rating:rate,level});if(state.history.length>10000)state.history=state.history.slice(-10000);state.words=knownWords();if(!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();wordIndex=(wordIndex+1)%wordDeck.length;wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])}
+function rateWord(rate){
+ const x=wordDeck[wordIndex%wordDeck.length],key=wordKey(x),now=Date.now(),old=state.wordSrs[key]||{};
+ const wasNew=!old.reviews; let days=0,level='Learning';
+ if(rate==='again'){days=10/1440}
+ else if(rate==='hard'){days=Math.max(1,(old.interval||0)*1.5);level='Learning'}
+ else{days=old.interval?Math.min(90,Math.max(3,old.interval*2.3)):3;level=days>=21?'Mastered':'Familiar'}
+ state.wordSrs[key]={level,last:now,due:now+days*86400000,reviews:(old.reviews||0)+1,interval:days,word:x.word,reading:x.reading||''};
+ state.history.push({ts:now,key,word:x.word,reading:x.reading||'',rating:rate,level});
+ if(state.history.length>10000)state.history=state.history.slice(-10000);
+ state.studySession=state.studySession||{};
+ if(wasNew)state.studySession.newSeenToday=(state.studySession.newSeenToday||0)+1; else state.studySession.reviewsToday=(state.studySession.reviewsToday||0)+1;
+ state.words=knownWords(); if(!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());
+ wordIndex=nextUnseenIndex(wordIndex); wordRevealed=false; persistWordPosition(); save();
+ render('单词',nav.children[pages.indexOf('单词')]);
+}
 function study(type,title,reading,meaning,q,choices,correct){return `<div class=grid><div class='card span8'><span class=tag>${type}</span><h2>${title}</h2><p>${reading}</p><p class=big style='font-size:24px'>${meaning}</p><div class=question>${q}</div><div class=choices>${choices.map((c,i)=>`<button data-answer=${i} data-correct=${i===correct?1:0}>${String.fromCharCode(65+i)}　${c}</button>`).join('')}</div><p id=feedback></p></div><div class='card span4'><h2>掌握状态</h2><button class='btn secondary mastery'>认识</button> <button class='btn secondary mastery'>模糊</button> <button class='btn secondary mastery'>不会</button><p class=muted>后续版本将按掌握程度安排间隔复习。</p></div></div>`}
-function bind(p){let rw=document.querySelector('#revealWord');if(rw)rw.onclick=()=>{wordRevealed=true;render('单词',nav.children[pages.indexOf('单词')]);const x=wordDeck[wordIndex%wordDeck.length];if(state.audio.autoWord)speakJapanese(x.reading||x.word);if(state.audio.autoExample&&x.examples?.[0])setTimeout(()=>speakJapanese(exampleSpeechText(x.examples[0])),900)};let sw=document.querySelector('#speakWord');if(sw)sw.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(x.reading||x.word)};let se=document.querySelector('#speakExample');if(se)se.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(exampleSpeechText(x.examples?.[0]))};let ar=document.querySelector('#audioRate');if(ar)ar.onchange=()=>{state.audio.rate=Number(ar.value);save()};let aw=document.querySelector('#autoWord');if(aw)aw.onchange=()=>{state.audio.autoWord=aw.checked;save()};let ae=document.querySelector('#autoExample');if(ae)ae.onchange=()=>{state.audio.autoExample=ae.checked;save()};let rnd=document.querySelector('#randomWord');if(rnd)rnd.onclick=()=>{wordIndex=Math.floor(Math.random()*wordDeck.length);wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])};let due=document.querySelector('#dueWord');if(due)due.onclick=()=>{const now=Date.now(),i=wordDeck.findIndex(w=>(state.wordSrs[w.id||w.word]?.due||Infinity)<=now);if(i>=0)wordIndex=i;wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])};document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>rateWord(b.dataset.rate));document.querySelectorAll('[data-task]').forEach(x=>x.onchange=()=>{state.done[x.dataset.task]=x.checked;if(x.checked&&!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();render('首页',nav.children[0])});document.querySelectorAll('[data-correct]').forEach(x=>x.onclick=()=>{let ok=x.dataset.correct==='1';document.querySelector('#feedback').innerHTML=ok?'<b>✓ 正解</b>':'<b>✕ 不正解</b>　已加入错题本';if(!ok){state.wrong.push({type:p,q:x.closest('.card').querySelector('.question')?.textContent||'练习题'});save()}});document.querySelectorAll('.mastery').forEach(x=>x.onclick=()=>{if(p==='单词')state.words++;if(p==='语法')state.grammar++;save();x.textContent='✓ '+x.textContent});let ep=document.querySelector('#exportProgress');if(ep)ep.onclick=()=>{const blob=new Blob([JSON.stringify({app:'N1 Study OS',version:'3.2',exportedAt:new Date().toISOString(),state},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='n1-study-progress-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};let ip=document.querySelector('#importProgress');if(ip)ip.onchange=async()=>{const f=ip.files?.[0];if(!f)return;try{const d=JSON.parse(await f.text());const incoming=d.state||d;if(!incoming.wordSrs)throw new Error('invalid');if(confirm('导入会用备份覆盖当前学习进度，继续吗？')){state=incoming;if(!state.audio)state.audio={rate:1,autoWord:false,autoExample:false};if(!state.history)state.history=[];save();render('单词',nav.children[pages.indexOf('单词')])}}catch(e){alert('无法读取这个进度备份文件。')}};let t=document.querySelector('#transcript');if(t)t.onclick=()=>document.querySelector('#trans').hidden=false;document.querySelector('#streak').textContent=state.days.length}
+function bind(p){let rw=document.querySelector('#revealWord');if(rw)rw.onclick=()=>{wordRevealed=true;render('单词',nav.children[pages.indexOf('单词')]);const x=wordDeck[wordIndex%wordDeck.length];if(state.audio.autoWord)speakJapanese(x.reading||x.word);if(state.audio.autoExample&&x.examples?.[0])setTimeout(()=>speakJapanese(exampleSpeechText(x.examples[0])),900)};let sw=document.querySelector('#speakWord');if(sw)sw.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(x.reading||x.word)};let se=document.querySelector('#speakExample');if(se)se.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(exampleSpeechText(x.examples?.[0]))};let ar=document.querySelector('#audioRate');if(ar)ar.onchange=()=>{state.audio.rate=Number(ar.value);save()};let aw=document.querySelector('#autoWord');if(aw)aw.onchange=()=>{state.audio.autoWord=aw.checked;save()};let ae=document.querySelector('#autoExample');if(ae)ae.onchange=()=>{state.audio.autoExample=ae.checked;save()};let rnd=document.querySelector('#randomWord');if(rnd)rnd.onclick=()=>{wordIndex=Math.floor(Math.random()*wordDeck.length);wordRevealed=false;persistWordPosition();render('单词',nav.children[pages.indexOf('单词')])};let due=document.querySelector('#dueWord');if(due)due.onclick=()=>{const now=Date.now(),i=wordDeck.findIndex(w=>(state.wordSrs[w.id||w.word]?.due||Infinity)<=now);if(i>=0)wordIndex=i;wordRevealed=false;persistWordPosition();render('单词',nav.children[pages.indexOf('单词')])};document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>rateWord(b.dataset.rate));document.querySelectorAll('[data-task]').forEach(x=>x.onchange=()=>{state.done[x.dataset.task]=x.checked;if(x.checked&&!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();render('首页',nav.children[0])});document.querySelectorAll('[data-correct]').forEach(x=>x.onclick=()=>{let ok=x.dataset.correct==='1';document.querySelector('#feedback').innerHTML=ok?'<b>✓ 正解</b>':'<b>✕ 不正解</b>　已加入错题本';if(!ok){state.wrong.push({type:p,q:x.closest('.card').querySelector('.question')?.textContent||'练习题'});save()}});document.querySelectorAll('.mastery').forEach(x=>x.onclick=()=>{if(p==='单词')state.words++;if(p==='语法')state.grammar++;save();x.textContent='✓ '+x.textContent});let ep=document.querySelector('#exportProgress');if(ep)ep.onclick=()=>{const blob=new Blob([JSON.stringify({app:'N1 Study OS',version:'3.3',exportedAt:new Date().toISOString(),state},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='n1-study-progress-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};let ip=document.querySelector('#importProgress');if(ip)ip.onchange=async()=>{const f=ip.files?.[0];if(!f)return;try{const d=JSON.parse(await f.text());const incoming=d.state||d;if(!incoming.wordSrs)throw new Error('invalid');if(confirm('导入会用备份覆盖当前学习进度，继续吗？')){state=incoming;if(!state.audio)state.audio={rate:1,autoWord:false,autoExample:false};if(!state.history)state.history=[];save();render('单词',nav.children[pages.indexOf('单词')])}}catch(e){alert('无法读取这个进度备份文件。')}};let t=document.querySelector('#transcript');if(t)t.onclick=()=>document.querySelector('#trans').hidden=false;document.querySelector('#streak').textContent=state.days.length}
 
 // Mobile-first bottom navigation
 const mobileItems=[['首页','⌂','首页'],['学习','学','单词'],['练习','練','专项练习'],['进度','進','统计'],['我的','☰','学习计划']];
@@ -98,4 +143,5 @@ if(mobileNav){mobileItems.forEach(([label,icon,page])=>{const bt=document.create
 
 // Initialize only after all view functions exist. This avoids Safari/GitHub Pages loading a blank shell.
 pages.forEach((p)=>{const b=document.createElement('button');b.textContent=p;b.onclick=()=>render(p,b);nav.appendChild(b)});
+restoreWordPosition();
 render('首页',nav.children[0]);
