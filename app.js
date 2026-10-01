@@ -2,6 +2,7 @@ const pages=['首页','学习计划','单词','语法','读解','听解','专项
 const nav=document.querySelector('#nav'), app=document.querySelector('#app');
 let state=JSON.parse(localStorage.getItem('n1os')||'{"done":{},"words":0,"grammar":0,"wrong":[],"days":[],"wordSrs":{}}');
 if(!state.wordSrs) state.wordSrs={};
+if(!state.audio) state.audio={rate:1, autoWord:false, autoExample:false};
 const save=()=>localStorage.setItem('n1os',JSON.stringify(state));
 function countdown(){const target=new Date('2027-12-05T09:00:00');const d=Math.max(0,Math.ceil((target-new Date())/86400000));document.querySelector('#countdown').textContent=`あと ${d} 日（暂定）`};countdown();
 function render(p,b){[...nav.children].forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');document.querySelector('#pageTitle').textContent=p==='首页'?'今日の学習':p; app.innerHTML=views[p]();bind(p)}
@@ -19,17 +20,62 @@ const views={
 '收藏':()=>`<div class=card><h2>收藏夹</h2><p class=muted>以后可收藏单词、语法、阅读文章与错题。</p></div>`,
 '统计':()=>`<div class=grid><div class='card span12'><div class=metrics>${[['学习天数',state.days.length],['掌握词汇',state.words],['语法',state.grammar],['错题',state.wrong.length]].map(x=>`<div class=metric><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}</div></div><div class='card span6'><h2>近 7 日学习量</h2><div class=week>${[25,55,35,80,60,90,45].map(h=>`<i style='height:${h}%'></i>`).join('')}</div></div><div class='card span6'><h2>能力趋势</h2><p>語彙　—　数据积累中</p><p>文法　—　数据积累中</p><p>読解　—　数据积累中</p><p>聴解　—　数据积累中</p></div></div>`,
 '官方资料':()=>`<div class=grid><div class='card span6 resource'><h2>JLPT 官方样题</h2><p>使用官方 Sample Questions 熟悉 N1 题型。</p><a href='https://www.jlpt.jp/e/samples/forlearners.html' target=_blank>打开 JLPT 官方页面 ↗</a></div><div class='card span6 resource'><h2>Official Practice Workbook</h2><p>官方练习册、答案与听力材料入口。</p><a href='https://www.jlpt.jp/e/samples/sampleindex.html' target=_blank>打开官方 Practice Workbook ↗</a></div><div class='card span12'><p class=notice>版权材料不直接复制进本站。你合法拥有的教材/PDF/音频后续可以做成个人练习库。</p></div></div>`};
-const wordDeck=[
-{w:'見合わせる',r:'みあわせる',m:'暂缓；推迟；暂且不做',pos:'他動詞・一段',ex:'悪天候のため、試合の開催を見合わせることになった。',er:'あくてんこう の ため、しあい の かいさい を みあわせる こと に なった。',cn:'因天气恶劣，决定暂缓举行比赛。',coll:'開催を見合わせる / 発表を見合わせる',note:'不一定等于取消，更接近“暂缓、观望后再决定”。'},
-{w:'促す',r:'うながす',m:'催促；促使；推动',pos:'他動詞・五段',ex:'政府は企業に対して、働き方の見直しを促した。',er:'せいふ は きぎょう に たいして、はたらきかた の みなおし を うながした。',cn:'政府敦促企业重新审视工作方式。',coll:'注意を促す / 改善を促す / 行動を促す',note:'常用于较正式语境，表示推动对方采取行动或发生变化。'},
-{w:'滞る',r:'とどこおる',m:'停滞；拖延；不顺畅',pos:'自動詞・五段',ex:'大雪の影響で、商品の配送が滞っている。',er:'おおゆき の えいきょう で、しょうひん の はいそう が とどこおっている。',cn:'受大雪影响，商品配送出现了延误。',coll:'支払いが滞る / 交通が滞る / 業務が滞る',note:'强调原本应该顺利进行的事情卡住、延迟。'},
-{w:'免れる',r:'まぬかれる',m:'避免；幸免；摆脱',pos:'他動詞・一段',ex:'早めに避難したため、大きな被害を免れた。',er:'はやめ に ひなん した ため、おおきな ひがい を まぬかれた。',cn:'因为提前避难，避免了重大损失。',coll:'責任を免れる / 被害を免れる / 処罰を免れる',note:'常与负面结果搭配，表示没有遭受本来可能发生的不利情况。'},
-{w:'著しい',r:'いちじるしい',m:'显著的；明显的；惊人的',pos:'い形容詞',ex:'この地域では人口の減少が著しい。',er:'この ちいき では じんこう の げんしょう が いちじるしい。',cn:'这个地区的人口减少十分显著。',coll:'著しい成長 / 著しい変化 / 著しく増加する',note:'比「大きい」更正式，常用于变化、增长、下降等程度非常明显的情况。'}];
-let wordIndex=0, wordRevealed=false;
-function wordFlashcards(){const x=wordDeck[wordIndex%wordDeck.length];const rec=state.wordSrs[x.w]||{};return `<div class=grid><div class='card span8 flashcard'><div class=flash-top><span class=tag>語彙 · Flashcard</span><span class=progress-mini>${wordIndex%wordDeck.length+1} / ${wordDeck.length} · ${rec.level||'New'}</span></div><h2 class=flash-word>${x.w}</h2><div class=flash-reading>${x.r}</div>${wordRevealed?`<div class=answer-panel><p class=meaning>${x.m}</p><div class=example><b>${x.ex}</b><div class=example-reading>${x.er}</div><div>${x.cn}</div></div><div class=meta-row><b>词性</b><span>${x.pos}</span></div><div class=meta-row><b>搭配</b><span>${x.coll}</span></div><div class=meta-row><b>提示</b><span>${x.note}</span></div><div class=srs-actions><button data-rate=again>不会<br><small>很快再看</small></button><button data-rate=hard>模糊<br><small>加强复习</small></button><button data-rate=good>认识<br><small>延后复习</small></button></div>`:`<div class=reveal><p class=muted>先在脑中回忆词义，再显示答案。</p><button class=btn id=revealWord>显示答案</button></div>`}</div><div class='card span4'><h2>学习方式</h2><p>① 看单词与读音并回忆</p><p>② 显示释义、例句与完整读法</p><p>③ 选择掌握程度</p><p>④ 系统记录状态并安排复习</p><div class=notice>选择题已从“学习”移出，之后放到“练习 → 語彙”。</div></div></div>`}
-function rateWord(rate){const x=wordDeck[wordIndex%wordDeck.length], now=Date.now();const cfg={again:['Learning',10*60e3],hard:['Learning',24*60*60e3],good:['Familiar',3*24*60*60e3]}[rate];state.wordSrs[x.w]={level:cfg[0],last:now,due:now+cfg[1],reviews:(state.wordSrs[x.w]?.reviews||0)+1};if(rate==='good')state.words=Object.values(state.wordSrs).filter(v=>v.level==='Familiar'||v.level==='Mastered').length;if(!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();wordIndex=(wordIndex+1)%wordDeck.length;wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])}
+const FALLBACK_WORDS=[
+{id:'local-1',word:'見合わせる',reading:'みあわせる',meanings:['暂缓；推迟；暂且不做'],pos:['他動詞・一段'],examples:[{ja:'悪天候のため、試合の開催を見合わせることになった。',furigana:'{悪天候|あくてんこう}のため、{試合|しあい}の{開催|かいさい}を{見合|みあ}わせることになった。',en:'因天气恶劣，决定暂缓举行比赛。'}],zh:true},
+{id:'local-2',word:'促す',reading:'うながす',meanings:['催促；促使；推动'],pos:['他動詞・五段'],examples:[{ja:'政府は企業に対して、働き方の見直しを促した。',furigana:'{政府|せいふ}は{企業|きぎょう}に{対|たい}して、{働|はたら}き{方|かた}の{見直|みなお}しを{促|うなが}した。',en:'政府敦促企业重新审视工作方式。'}],zh:true},
+{id:'local-3',word:'滞る',reading:'とどこおる',meanings:['停滞；拖延；不顺畅'],pos:['自動詞・五段'],examples:[{ja:'大雪の影響で、商品の配送が滞っている。',furigana:'{大雪|おおゆき}の{影響|えいきょう}で、{商品|しょうひん}の{配送|はいそう}が{滞|とどこお}っている。',en:'受大雪影响，商品配送出现了延误。'}],zh:true},
+{id:'local-4',word:'免れる',reading:'まぬかれる',meanings:['避免；幸免；摆脱'],pos:['他動詞・一段'],examples:[{ja:'早めに避難したため、大きな被害を免れた。',furigana:'{早|はや}めに{避難|ひなん}したため、{大|おお}きな{被害|ひがい}を{免|まぬか}れた。',en:'因为提前避难，避免了重大损失。'}],zh:true},
+{id:'local-5',word:'著しい',reading:'いちじるしい',meanings:['显著的；明显的；惊人的'],pos:['い形容詞'],examples:[{ja:'この地域では人口の減少が著しい。',furigana:'この{地域|ちいき}では{人口|じんこう}の{減少|げんしょう}が{著|いちじる}しい。',en:'这个地区的人口减少十分显著。'}],zh:true}
+];
+const VOCAB_URL='https://raw.githubusercontent.com/evanclan/OpenJLPT/main/data/json/vocab/n1.json';
+let wordDeck=FALLBACK_WORDS.slice(), wordIndex=0, wordRevealed=false, vocabLoading=false, vocabLoaded=false, vocabError='';
+async function loadVocabulary(){
+ if(vocabLoading||vocabLoaded)return; vocabLoading=true;
+ try{
+  let data=null;
+  if('caches' in window){const c=await caches.open('n1-vocab-v3');let r=await c.match(VOCAB_URL);if(r)data=await r.json();else{r=await fetch(VOCAB_URL,{cache:'no-cache'});if(!r.ok)throw new Error('HTTP '+r.status);await c.put(VOCAB_URL,r.clone());data=await r.json();}}
+  else {const r=await fetch(VOCAB_URL);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();}
+  if(Array.isArray(data)&&data.length>3000){wordDeck=data;vocabLoaded=true;vocabError='';}
+  else throw new Error('词库数据不完整');
+ }catch(e){vocabError='完整词库暂时无法载入；当前使用内置示范词。联网后刷新即可重试。';console.error(e)}
+ vocabLoading=false;
+ if(document.querySelector('#pageTitle')?.textContent==='单词') render('单词',nav.children[pages.indexOf('单词')]);
+}
+function furiganaHTML(s=''){return s.replace(/\{([^|{}]+)\|([^{}]+)\}/g,'<ruby>$1<rt>$2</rt></ruby>')}
+function dueWords(){const now=Date.now();return wordDeck.filter(w=>state.wordSrs[w.id||w.word]?.due<=now).length}
+function knownWords(){return Object.values(state.wordSrs).filter(v=>['Familiar','Mastered'].includes(v.level)).length}
+function wordFlashcards(){
+ if(!vocabLoaded&&!vocabLoading)setTimeout(loadVocabulary,0);
+ const x=wordDeck[wordIndex%wordDeck.length], key=x.id||x.word, rec=state.wordSrs[key]||{}, ex=x.examples?.[0];
+ const meanings=(x.meanings||[]).join('；');
+ return `<div class=grid><div class='card span8 flashcard'>
+ <div class=flash-top><span class=tag>語彙 · Flashcard</span><span class=progress-mini>${wordIndex%wordDeck.length+1} / ${wordDeck.length} · ${rec.level||'New'}</span></div>
+ <div class=word-audio-row><h2 class=flash-word>${x.word}</h2><button class='audio-btn' id=speakWord aria-label='播放单词发音'>🔊</button></div><div class=flash-reading>${x.reading||''} ${x.romaji?`<small>· ${x.romaji}</small>`:''}</div>
+ ${wordRevealed?`<div class=answer-panel><p class=meaning>${meanings}</p><p class=muted>${x.zh?'中文释义':'释义（English source）'}</p>
+ ${ex?`<div class=example><div class=example-head><b>${ex.ja}</b><button class='audio-btn small' id=speakExample aria-label='播放例句'>🔊</button></div>${ex.furigana?`<div class=example-reading>${furiganaHTML(ex.furigana)}</div>`:''}<div>${ex.en||''}</div></div>`:`<div class=notice>该词条的数据源暂无例句；不伪造例句。</div>`}
+ <div class=meta-row><b>词性</b><span>${(x.pos||[]).join(' · ')||'—'}</span></div><div class=meta-row><b>JLPT</b><span>${x.level||'N1'}</span></div>
+ <div class=srs-actions><button data-rate=again>不会<br><small>10 分钟</small></button><button data-rate=hard>模糊<br><small>1 天</small></button><button data-rate=good>认识<br><small>3 天</small></button></div></div>`:`<div class=reveal><p class=muted>先在脑中回忆词义，再显示答案。</p><button class=btn id=revealWord>显示答案</button></div>`}
+ </div><div class='card span4'><h2>N1 Vocabulary</h2><div class=metrics style='grid-template-columns:1fr 1fr'><div class=metric><span>词库</span><b>${wordDeck.length}</b></div><div class=metric><span>已掌握</span><b>${knownWords()}</b></div><div class=metric><span>待复习</span><b>${dueWords()}</b></div><div class=metric><span>状态</span><b style='font-size:15px'>${vocabLoaded?'完整库':'载入中'}</b></div></div>${vocabError?`<p class=notice>${vocabError}</p>`:''}<p class=muted>完整 N1 库来自 OpenJLPT，共 3,463 个 N1 词条；JLPT 官方不发布固定词表，因此这是社区标准备考数据，而非“官方 N1 词表”。</p><p class=muted>数据源的完整词条释义/例句翻译为英文；内置精选卡保留中文。为了准确性，本版不会机器伪造数千条中文释义。</p><div class=vocab-tools><button class='btn secondary' id=randomWord>随机一词</button><button class='btn secondary' id=dueWord>复习到期</button></div><div class=audio-settings><h3>🔊 发音设置</h3><label>语速 <select id=audioRate><option value='0.75' ${state.audio.rate==0.75?'selected':''}>慢速 0.75×</option><option value='1' ${state.audio.rate==1?'selected':''}>正常 1.0×</option></select></label><label><input type=checkbox id=autoWord ${state.audio.autoWord?'checked':''}> 显示答案时自动朗读单词</label><label><input type=checkbox id=autoExample ${state.audio.autoExample?'checked':''}> 显示答案时自动朗读例句</label><p class=muted id=voiceStatus>使用设备的 ja-JP 日语语音。</p></div></div></div>`}
+
+let japaneseVoice=null;
+function refreshJapaneseVoice(){
+ const voices=window.speechSynthesis?.getVoices?.()||[];
+ japaneseVoice=voices.find(v=>/^ja-JP$/i.test(v.lang))||voices.find(v=>/^ja/i.test(v.lang))||null;
+ return japaneseVoice;
+}
+if('speechSynthesis' in window){refreshJapaneseVoice();window.speechSynthesis.onvoiceschanged=refreshJapaneseVoice;}
+function speakJapanese(text){
+ if(!text)return false;
+ if(!('speechSynthesis' in window)){alert('当前浏览器不支持语音朗读。请使用最新版 Safari / Chrome。');return false;}
+ refreshJapaneseVoice();
+ const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';u.rate=Number(state.audio?.rate||1);u.pitch=1;
+ if(japaneseVoice)u.voice=japaneseVoice;
+ window.speechSynthesis.cancel();window.speechSynthesis.speak(u);return true;
+}
+
+function rateWord(rate){const x=wordDeck[wordIndex%wordDeck.length],key=x.id||x.word,now=Date.now(),old=state.wordSrs[key]||{};let days=0,level='Learning';if(rate==='again'){days=10/1440}else if(rate==='hard'){days=Math.max(1,(old.interval||0)*1.5);level='Learning'}else{days=old.interval?Math.min(90,Math.max(3,old.interval*2.3)):3;level=days>=21?'Mastered':'Familiar'}state.wordSrs[key]={level,last:now,due:now+days*86400000,reviews:(old.reviews||0)+1,interval:days,word:x.word};state.words=knownWords();if(!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();wordIndex=(wordIndex+1)%wordDeck.length;wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])}
 function study(type,title,reading,meaning,q,choices,correct){return `<div class=grid><div class='card span8'><span class=tag>${type}</span><h2>${title}</h2><p>${reading}</p><p class=big style='font-size:24px'>${meaning}</p><div class=question>${q}</div><div class=choices>${choices.map((c,i)=>`<button data-answer=${i} data-correct=${i===correct?1:0}>${String.fromCharCode(65+i)}　${c}</button>`).join('')}</div><p id=feedback></p></div><div class='card span4'><h2>掌握状态</h2><button class='btn secondary mastery'>认识</button> <button class='btn secondary mastery'>模糊</button> <button class='btn secondary mastery'>不会</button><p class=muted>后续版本将按掌握程度安排间隔复习。</p></div></div>`}
-function bind(p){let rw=document.querySelector('#revealWord');if(rw)rw.onclick=()=>{wordRevealed=true;render('单词',nav.children[pages.indexOf('单词')])};document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>rateWord(b.dataset.rate));document.querySelectorAll('[data-task]').forEach(x=>x.onchange=()=>{state.done[x.dataset.task]=x.checked;if(x.checked&&!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();render('首页',nav.children[0])});document.querySelectorAll('[data-correct]').forEach(x=>x.onclick=()=>{let ok=x.dataset.correct==='1';document.querySelector('#feedback').innerHTML=ok?'<b>✓ 正解</b>':'<b>✕ 不正解</b>　已加入错题本';if(!ok){state.wrong.push({type:p,q:x.closest('.card').querySelector('.question')?.textContent||'练习题'});save()}});document.querySelectorAll('.mastery').forEach(x=>x.onclick=()=>{if(p==='单词')state.words++;if(p==='语法')state.grammar++;save();x.textContent='✓ '+x.textContent});let t=document.querySelector('#transcript');if(t)t.onclick=()=>document.querySelector('#trans').hidden=false;document.querySelector('#streak').textContent=state.days.length}
+function bind(p){let rw=document.querySelector('#revealWord');if(rw)rw.onclick=()=>{wordRevealed=true;render('单词',nav.children[pages.indexOf('单词')]);const x=wordDeck[wordIndex%wordDeck.length];if(state.audio.autoWord)speakJapanese(x.word||x.reading);if(state.audio.autoExample&&x.examples?.[0]?.ja)setTimeout(()=>speakJapanese(x.examples[0].ja),900)};let sw=document.querySelector('#speakWord');if(sw)sw.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(x.word||x.reading)};let se=document.querySelector('#speakExample');if(se)se.onclick=()=>{const x=wordDeck[wordIndex%wordDeck.length];speakJapanese(x.examples?.[0]?.ja)};let ar=document.querySelector('#audioRate');if(ar)ar.onchange=()=>{state.audio.rate=Number(ar.value);save()};let aw=document.querySelector('#autoWord');if(aw)aw.onchange=()=>{state.audio.autoWord=aw.checked;save()};let ae=document.querySelector('#autoExample');if(ae)ae.onchange=()=>{state.audio.autoExample=ae.checked;save()};let rnd=document.querySelector('#randomWord');if(rnd)rnd.onclick=()=>{wordIndex=Math.floor(Math.random()*wordDeck.length);wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])};let due=document.querySelector('#dueWord');if(due)due.onclick=()=>{const now=Date.now(),i=wordDeck.findIndex(w=>(state.wordSrs[w.id||w.word]?.due||Infinity)<=now);if(i>=0)wordIndex=i;wordRevealed=false;render('单词',nav.children[pages.indexOf('单词')])};document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>rateWord(b.dataset.rate));document.querySelectorAll('[data-task]').forEach(x=>x.onchange=()=>{state.done[x.dataset.task]=x.checked;if(x.checked&&!state.days.includes(new Date().toDateString()))state.days.push(new Date().toDateString());save();render('首页',nav.children[0])});document.querySelectorAll('[data-correct]').forEach(x=>x.onclick=()=>{let ok=x.dataset.correct==='1';document.querySelector('#feedback').innerHTML=ok?'<b>✓ 正解</b>':'<b>✕ 不正解</b>　已加入错题本';if(!ok){state.wrong.push({type:p,q:x.closest('.card').querySelector('.question')?.textContent||'练习题'});save()}});document.querySelectorAll('.mastery').forEach(x=>x.onclick=()=>{if(p==='单词')state.words++;if(p==='语法')state.grammar++;save();x.textContent='✓ '+x.textContent});let t=document.querySelector('#transcript');if(t)t.onclick=()=>document.querySelector('#trans').hidden=false;document.querySelector('#streak').textContent=state.days.length}
 
 // Mobile-first bottom navigation
 const mobileItems=[['首页','⌂','首页'],['学习','学','单词'],['练习','練','专项练习'],['进度','進','统计'],['我的','☰','学习计划']];
