@@ -1,21 +1,15 @@
-N1 Study OS v3.3 — Chinese-first / reading-safe audio / progress backup
+N1 Study OS V3.4 — Chinese Vocabulary Merge Edition
 
-Fixes:
-- Word audio speaks the database kana reading, not ambiguous kanji.
-- Example audio uses furigana markup when available.
-- Chinese-first UI; English source glosses are folded as auxiliary when no verified Chinese gloss exists.
-- SRS progress is persisted in localStorage with review history.
-- Export/import progress JSON for backup and device migration.
+主要变化：
+1. 保留 V3.3 的断点续学、SRS、本机进度、JSON 备份、假名 TTS 发音。
+2. 网站优先读取 n1-vocab-zh.json；中文释义作为主释义，英文折叠为辅助。
+3. 包含 GitHub Actions 工作流：首次上传后，GitHub 自动下载 OpenJLPT N1 词表与 Tomoshi 2026-09-02 开放中文 SQLite 数据，按 JMdict ID 合并，生成 n1-vocab-zh.json 与 vocab-coverage.json。
+4. 单词页会显示实际中文覆盖数量与百分比。
 
-Upload all files to the ROOT of the existing GitHub repository and commit.
+数据来源与许可：
+- OpenJLPT: CC BY-SA 4.0；N1 分级为社区估计，JLPT 官方不发布固定词表。
+- Tomoshi Open Data / JMdict-derived Chinese glosses: CC BY-SA 4.0；需署名 EDRDG 与 Tomoshi (Y1Z)。
+- 本项目对上述数据做的修改：筛选 OpenJLPT N1 词条，并按 JMdict entry ID 合并 Tomoshi 简体中文释义，生成网页专用 JSON。
 
-V3.3 changes
-- Persistent flashcard position: current word/deck position survives refresh and reopening.
-- Learned cards are not restarted as New from index 0; the next unseen card is selected after rating.
-- Study-session counters are stored alongside SRS history.
-- Chinese-first dictionary architecture retained; English glosses are auxiliary only when no Chinese match is available.
-- Pronunciation continues to speak the stored kana reading, not ambiguous kanji text.
-
-Dictionary attribution / licensing
-- OpenJLPT: CC BY-SA 4.0; N1 community level estimates, not an official JLPT vocabulary list.
-- Tomoshi open data / JMdict-derived Chinese layers: CC BY-SA 4.0 where applicable; credit EDRDG and Tomoshi (Y1Z). See upstream NOTICE/LICENSE for details.
+首次上传到 GitHub：
+请连同隐藏的 .github 文件夹一起上传。GitHub Actions 完成后，仓库根目录会自动多出 n1-vocab-zh.json 和 vocab-coverage.json。
